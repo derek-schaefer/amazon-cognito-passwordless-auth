@@ -122,7 +122,7 @@ export async function addChallengeToEvent(
     throw new UserFacingError(`Invalid redirectUri: ${redirectUri}`);
   }
   // Send challenge with new secret login code
-  await createAndSendMagicLink(event, {
+  const secretLoginLink = await createAndSendMagicLink(event, {
     redirectUri,
   });
   const email = event.request.userAttributes.email;
@@ -134,7 +134,11 @@ export async function addChallengeToEvent(
   }
   // Current implementation has no use for publicChallengeParameters - feel free to provide them
   // if you want to use them in your front-end:
-  // event.response.publicChallengeParameters = {};
+  if (secretLoginLink) {
+    event.response.publicChallengeParameters = {
+      secretLoginLink,
+    };
+  }
   event.response.privateChallengeParameters = {
     email: email,
   };
@@ -218,7 +222,7 @@ async function createAndSendMagicLink(
   }: {
     redirectUri: string;
   }
-): Promise<void> {
+): Promise<string | null> {
   logger.debug("Creating new magic link ...");
   const exp = Math.floor(Date.now() / 1000 + config.secondsUntilExpiry);
   const iat = Math.floor(Date.now() / 1000);
@@ -285,7 +289,7 @@ async function createAndSendMagicLink(
   logger.debug("Sending magic link ...");
   // Toggle userNotFound error with "Prevent user existence errors" in the Cognito app client. (see above)
   if (event.request.userNotFound) {
-    return;
+    return null;
   }
   await config.emailSender({
     emailAddress: event.request.userAttributes.email,
@@ -294,6 +298,7 @@ async function createAndSendMagicLink(
     }),
   });
   logger.debug("Magic link sent!");
+  return secretLoginLink;
 }
 
 export async function addChallengeVerificationResultToEvent(
